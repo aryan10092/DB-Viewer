@@ -16,6 +16,7 @@ function parseConnectionString(connStr) {
       password: url.password,
       database: url.pathname.replace(/^\//, ""),
       ssl: url.search.includes("sslmode=require") ? { rejectUnauthorized: false } : undefined,
+      family:4
     };
   } catch {
     return null;
