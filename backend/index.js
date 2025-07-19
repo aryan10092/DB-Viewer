@@ -15,7 +15,8 @@ app.post('/api/test-connection', async (req, res) => {
     user,
     password,
     database,
-    ssl: { rejectUnauthorized: false }
+    ssl: { rejectUnauthorized: false },
+     family: 4 
   });
   try {
     await client.connect();
@@ -35,7 +36,8 @@ app.post('/api/list-tables', async (req, res) => {
     user,
     password,
     database,
-    ssl: { rejectUnauthorized: false }
+    ssl: { rejectUnauthorized: false },
+     family: 4 
   });
   try {
     await client.connect();
@@ -61,7 +63,8 @@ app.post('/api/query', async (req, res) => {
     user,
     password,
     database,
-    ssl: { rejectUnauthorized: false }
+    ssl: { rejectUnauthorized: false },
+     family: 4 
   });
   try {
     await client.connect();
