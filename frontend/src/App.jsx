@@ -5,6 +5,23 @@ import { Button } from "./components/ui/button";
 import axios from "axios";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "./components/ui/table";
 
+function parseConnectionString(connStr) {
+  // Basic Postgres connection string parser
+  try {
+    const url = new URL(connStr.replace(/^postgres(ql)?:/, 'http:'));
+    return {
+      host: url.hostname,
+      port: url.port || "5432",
+      user: url.username,
+      password: url.password,
+      database: url.pathname.replace(/^\//, ""),
+      ssl: url.search.includes("sslmode=require") ? { rejectUnauthorized: false } : undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export default function App() {
   const [form, setForm] = useState({
     host: "",
@@ -13,6 +30,8 @@ export default function App() {
     password: "",
     database: "",
   });
+  const [connStr, setConnStr] = useState("");
+  const [useConnStr, setUseConnStr] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
@@ -24,6 +43,8 @@ export default function App() {
   const [sqlResult, setSqlResult] = useState({ columns: [], rows: [] });
   const [sqlLoading, setSqlLoading] = useState(false);
   const [sqlError, setSqlError] = useState("");
+
+  const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -37,13 +58,22 @@ export default function App() {
     setTables([]);
     setSelectedTable(null);
     setTableData({ columns: [], rows: [] });
+    let payload = form;
+    if (useConnStr) {
+      const parsed = parseConnectionString(connStr);
+      if (!parsed) {
+        setError("Invalid connection string");
+        setConnecting(false);
+        return;
+      }
+      payload = parsed;
+    }
     try {
-      const apiUrl = import.meta.env.VITE_API_URL;
-      const res = await axios.post(`${apiUrl}/api/test-connection`, form);
+      const res = await axios.post(`${apiUrl}/api/test-connection`, payload);
       if (res.data.success) {
         setSuccess(true);
         // Fetch tables
-        const tablesRes = await axios.post(`${apiUrl}/api/list-tables`, form);
+        const tablesRes = await axios.post(`${apiUrl}/api/list-tables`, payload);
         if (tablesRes.data.success) {
           setTables(tablesRes.data.tables);
         } else {
@@ -59,14 +89,21 @@ export default function App() {
     }
   };
 
+  const getPayload = () => {
+    if (useConnStr) {
+      const parsed = parseConnectionString(connStr);
+      return parsed || {};
+    }
+    return form;
+  };
+
   const handleSelectTable = async (table) => {
     setSelectedTable(table);
     setLoadingTable(true);
     setTableData({ columns: [], rows: [] });
     try {
-      const apiUrl = import.meta.env.VITE_API_URL;
       const query = `SELECT * FROM "${table.table_schema}"."${table.table_name}" LIMIT 100;`;
-      const res = await axios.post(`${apiUrl}/api/query`, { ...form, query });
+      const res = await axios.post(`${apiUrl}/api/query`, { ...getPayload(), query });
       if (res.data.success) {
         setTableData({ columns: res.data.columns, rows: res.data.rows });
       } else {
@@ -85,11 +122,9 @@ export default function App() {
     setSqlError("");
     setSqlResult({ columns: [], rows: [] });
     try {
-      const apiUrl = import.meta.env.VITE_API_URL;
-      const res = await axios.post(`${apiUrl}/api/query`, { ...form, query: sql });
+      const res = await axios.post(`${apiUrl}/api/query`, { ...getPayload(), query: sql });
       if (res.data.success) {
         setSqlResult({ columns: res.data.columns, rows: res.data.rows });
-        // If the query affects the selected table, reload its data
         if (selectedTable && sql.toLowerCase().includes(selectedTable.table_name.toLowerCase())) {
           await handleSelectTable(selectedTable);
         }
@@ -111,42 +146,64 @@ export default function App() {
             <CardTitle>Connect to Postgres Database</CardTitle>
           </CardHeader>
           <form onSubmit={handleConnect}>
-            <CardContent className="space-y-4 mb-4">
-              <Input
-                name="host"
-                placeholder="Host (e.g. localhost)"
-                value={form.host}
-                onChange={handleChange}
-                required
-              />
-              <Input
-                name="port"
-                placeholder="Port (default: 5432)"
-                value={form.port}
-                onChange={handleChange}
-                required
-              />
-              <Input
-                name="user"
-                placeholder="User"
-                value={form.user}
-                onChange={handleChange}
-                required
-              />
-              <Input
-                name="password"
-                type="password"
-                placeholder="Password"
-                value={form.password}
-                onChange={handleChange}
-              />
-              <Input
-                name="database"
-                placeholder="Database name"
-                value={form.database}
-                onChange={handleChange}
-                required
-              />
+            <CardContent className="space-y-4">
+              <div className="flex items-center gap-2 mb-2">
+                <input
+                  type="checkbox"
+                  id="useConnStr"
+                  checked={useConnStr}
+                  onChange={() => setUseConnStr((v) => !v)}
+                  className="accent-primary"
+                />
+                <label htmlFor="useConnStr" className="text-sm cursor-pointer select-none">Connect using connection string</label>
+              </div>
+              {useConnStr ? (
+                <Input
+                  name="connStr"
+                  placeholder="postgresql://user:pass@host:port/db?sslmode=require"
+                  value={connStr}
+                  onChange={e => setConnStr(e.target.value)}
+                  required
+                />
+              ) : (
+                <>
+                  <Input
+                    name="host"
+                    placeholder="Host (e.g. localhost)"
+                    value={form.host}
+                    onChange={handleChange}
+                    required
+                  />
+                  <Input
+                    name="port"
+                    placeholder="Port (default: 5432)"
+                    value={form.port}
+                    onChange={handleChange}
+                    required
+                  />
+                  <Input
+                    name="user"
+                    placeholder="User"
+                    value={form.user}
+                    onChange={handleChange}
+                    required
+                  />
+                  <Input
+                    name="password"
+                    type="password"
+                    placeholder="Password"
+                    value={form.password}
+                    onChange={handleChange}
+                  />
+                  <Input
+                    name="database"
+                    placeholder="Database name"
+                    value={form.database}
+                    onChange={handleChange}
+                    required
+                  />
+                </>
+              )}
               {error && <div className="text-destructive text-sm">{error}</div>}
             </CardContent>
             <CardFooter>
