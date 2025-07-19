@@ -207,7 +207,7 @@ export default function App() {
               {error && <div className="text-destructive text-sm">{error}</div>}
             </CardContent>
             <CardFooter>
-              <Button type="submit" className="w-full" disabled={connecting}>
+              <Button type="submit" className="w-full mt-4" disabled={connecting}>
                 {connecting ? "Connecting..." : "Connect"}
               </Button>
             </CardFooter>
